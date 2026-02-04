@@ -13,8 +13,8 @@ requires-python = ">=3.13"
 dependencies = ["requests"]
 
 [project.urls]
-Homepage = "https://github.com/pypa/sampleproject"
-Issues = "https://github.com/pypa/sampleproject/issues"
+Homepage = "https://github.com/seekerluke/pygame-ios"
+Issues = "https://github.com/seekerluke/pygame-ios/issues"
 
 [project.scripts]
 pygame-ios = "pygame_ios.__main__:cli"
