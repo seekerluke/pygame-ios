@@ -50,7 +50,13 @@ def download_template(main_script_path: str):
     if len(sys.argv) >= 4:
         version_number = f"v{sys.argv[3]}"
     else:
-        raise RuntimeError("No pygame-ce version specified.")
+        print("No pygame-ce version specified.")
+
+        print("Supported versions:")
+        for version in get_supported_pygame_versions():
+            print(version)
+
+        sys.exit(0)
 
     version_stripped = version_number.removeprefix("v")
     download_path = os.path.join(
@@ -85,10 +91,12 @@ def copy_project_files(project_folder_path: str):
     dest_dir = os.path.join(
         project_folder_path, FOLDER_NAME, "pygame-ios", "app", "pygame-ios"
     )
+
+    # remove old files first
+    shutil.rmtree(dest_dir)
     shutil.copytree(
         project_folder_path,
         dest_dir,
-        dirs_exist_ok=True,
         # don't copy the Xcode template into the Xcode template
         ignore=lambda src, names: [FOLDER_NAME],
     )
