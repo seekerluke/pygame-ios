@@ -27,12 +27,12 @@ pygame-ios
 python -m pygame-ios
 ```
 
-This command needs arguments. You need to provide a location for your project folder where your files will be copied from, as well as an entry point script which will be renamed to `__main__.py` and used as the entry point in Xcode.
+This command needs arguments. You need to provide a location for your project folder where your files will be copied from, as well as an entry point script which will be renamed to `__main__.py` and used as the entry point in Xcode. You must also specify the pygame-ce version.
 
 Example usage:
 
 ```bash
-pygame-ios . game.py # copies files from current folder, uses game.py as the entry point script
+pygame-ios . game.py 2.5.6 # copies files from current folder, uses game.py as the entry point script, pygame-ce v2.5.6
 ```
 
 After running this command, an Xcode project will be downloaded. You can open this project in Xcode and run it on a device or simulator.
@@ -41,12 +41,4 @@ To update your Xcode project with new files or changes, just run the command aga
 
 It's recommended that you modify the Xcode project directly if you want to change metadata like the product name and icon, and add it to source control. **You cannot recover these changes if you delete the project,** like you might be able to in other libraries like Briefcase or Flutter.
 
-### Other Arguments
-
-You can also specify a pygame-ce version:
-
-```bash
-pygame-ios . game.py 2.5.5 # fetches the v2.5.5 version of the template
-```
-
-Without this argument, the command will download the latest template available. But you can specify a pygame-ce version in case you need something different from the latest stable. Not all pygame-ce versions are supported, see [here](https://github.com/seekerluke/pygame-ios-templates/releases) for supported versions, and see the [repository README](https://github.com/seekerluke/pygame-ios-templates?tab=readme-ov-file#making-new-templates) for details on how to make your own.
+Not all pygame-ce versions are supported, see [here](https://github.com/seekerluke/pygame-ios-templates/blob/main/patches/pygame-ce.json) for supported versions, and see the [repository README](https://github.com/seekerluke/pygame-ios-templates?tab=readme-ov-file#making-new-templates) for details on how to make your own.

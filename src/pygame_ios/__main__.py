@@ -13,15 +13,27 @@ BASE_DOWNLOAD_PATH = (
 )
 FOLDER_NAME = "pygame-ios-template"
 
+VERSIONS_JSON_PATH = "https://raw.githubusercontent.com/seekerluke/pygame-ios-templates/refs/heads/main/patches/pygame-ce.json"
+
 
 def check_args():
     result = len(sys.argv) >= 3
     if not result:
-        print("Usage: pygame-ios project_folder main_python_script [pygame_ce_version]")
+        print("Usage: pygame-ios project_folder main_python_script pygame_ce_version")
     return result
 
 
-def get_latest_version():
+def get_supported_pygame_versions():
+    try:
+        response = requests.get(VERSIONS_JSON_PATH)
+        response.raise_for_status()
+        json_data = json.loads(response.content)
+        return json_data["supportedVersions"]
+    except requests.exceptions.HTTPError:
+        return ["Failed to fetch supported versions."]
+
+
+def get_latest_repository_version():
     response = requests.get(os.path.join(BASE_API_PATH, "latest"))
     response.raise_for_status()
     json_data = json.loads(response.content)
@@ -35,11 +47,15 @@ def download_template(main_script_path: str):
         print("pygame-ios template already exists. Skipping.")
         return
 
-    version_number = f"v{sys.argv[3]}" if len(sys.argv) >= 4 else get_latest_version()
+    if len(sys.argv) >= 4:
+        version_number = f"v{sys.argv[3]}"
+    else:
+        raise RuntimeError("No pygame-ce version specified.")
+
     version_stripped = version_number.removeprefix("v")
     download_path = os.path.join(
         BASE_DOWNLOAD_PATH,
-        version_number,
+        get_latest_repository_version(),
         f"pygame-ios-template-{version_stripped}.zip",
     )
 
@@ -51,9 +67,11 @@ def download_template(main_script_path: str):
         print(
             f"Xcode template for pygame-ce version {version_number} does not exist. It might not be supported yet."
         )
-        print(
-            "Supported versions are listed here: https://github.com/seekerluke/pygame-ios-templates/releases"
-        )
+
+        print("Supported versions:")
+        for version in get_supported_pygame_versions():
+            print(version)
+
         sys.exit(0)
 
     print("Extracting...")
