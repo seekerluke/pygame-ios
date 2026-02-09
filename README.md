@@ -44,3 +44,15 @@ To update your Xcode project with new files or changes, just run the command aga
 It's recommended that you modify the Xcode project directly if you want to change metadata like the product name and icon, and add it to source control. **You cannot recover these changes if you delete the project,** like you might be able to in other libraries like Briefcase or Flutter.
 
 Not all pygame-ce versions are supported, see [here](https://github.com/seekerluke/pygame-ios-templates/blob/main/patches/pygame-ce.json) for supported versions, and see the [repository README](https://github.com/seekerluke/pygame-ios-templates?tab=readme-ov-file#making-new-templates) for details on how to make your own.
+
+## Other Arguments
+
+If you have a template .zip file on your machine, you can specify a path to that file instead of downloading one:
+
+```bash
+pygame-ios . game.py 2.5.6 ./template/your-template.zip
+```
+
+This is useful for custom templates, or if you just want to reduce network use.
+
+It's assumed that this template has the same folder structure as a template from [pygame-ios-templates](https://github.com/seekerluke/pygame-ios-templates). The version number is also ignored if you specify a local path.

@@ -17,13 +17,15 @@ VERSIONS_JSON_PATH = "https://raw.githubusercontent.com/seekerluke/pygame-ios-te
 
 
 def check_args():
-    result = len(sys.argv) >= 3
+    result = len(sys.argv) >= 4
     if not result:
-        print("Usage: pygame-ios project_folder main_python_script pygame_ce_version")
+        print(
+            "Usage: pygame-ios project_folder main_python_script pygame_ce_version [local_template_path]"
+        )
     return result
 
 
-def get_supported_pygame_versions():
+def get_supported_pygame_versions() -> list[str]:
     try:
         response = requests.get(VERSIONS_JSON_PATH)
         response.raise_for_status()
@@ -40,38 +42,26 @@ def get_latest_repository_version():
     return json_data["tag_name"]
 
 
-def download_template(main_script_path: str):
-    current_dir = os.path.dirname(main_script_path)
+def download_template(current_dir: str):
     template_dir = os.path.join(current_dir, FOLDER_NAME)
     if os.path.isdir(template_dir):
         print("pygame-ios template already exists. Skipping.")
         return
 
-    if len(sys.argv) >= 4:
-        version_number = f"v{sys.argv[3]}"
-    else:
-        print("No pygame-ce version specified.")
-
-        print("Supported versions:")
-        for version in get_supported_pygame_versions():
-            print(version)
-
-        sys.exit(0)
-
-    version_stripped = version_number.removeprefix("v")
+    version_number_prefixed = f"v{sys.argv[3]}"
     download_path = os.path.join(
         BASE_DOWNLOAD_PATH,
         get_latest_repository_version(),
-        f"pygame-ios-template-{version_stripped}.zip",
+        f"pygame-ios-template-{sys.argv[3]}.zip",
     )
 
     try:
-        print(f"Downloading Xcode template for pygame-ce {version_number}...")
+        print(f"Downloading Xcode template for pygame-ce {version_number_prefixed}...")
         response = requests.get(download_path)
         response.raise_for_status()
     except requests.exceptions.HTTPError:
         print(
-            f"Xcode template for pygame-ce version {version_number} does not exist. It might not be supported yet."
+            f"Xcode template for pygame-ce version {version_number_prefixed} does not exist. It might not be supported yet."
         )
 
         print("Supported versions:")
@@ -85,6 +75,20 @@ def download_template(main_script_path: str):
         zf.extractall(template_dir)
 
     print("Xcode template downloaded successfully.")
+
+
+def use_local_template(current_dir: str, local_path: str):
+    template_dir = os.path.join(current_dir, FOLDER_NAME)
+    if os.path.isdir(template_dir):
+        print("pygame-ios template already exists. Skipping.")
+        return
+
+    print("Using local template.")
+    print("Extracting...")
+    with zipfile.ZipFile(local_path) as zf:
+        zf.extractall(template_dir)
+
+    print(f"Used local template from {local_path}.")
 
 
 def copy_project_files(project_folder_path: str):
@@ -119,8 +123,13 @@ def cli():
         return  # early exit
 
     project_folder_path = os.path.abspath(sys.argv[1])
-    main_script_path = os.path.abspath(sys.argv[2])
-    download_template(main_script_path)
+
+    if len(sys.argv) > 4:
+        local_template_path = os.path.realpath(sys.argv[4])
+        use_local_template(project_folder_path, local_template_path)
+    else:
+        download_template(project_folder_path)
+
     copy_project_files(project_folder_path)
     finalise()
 
