@@ -14,6 +14,8 @@ This package contains a simple CLI tool that downloads a template from [pygame-i
 
 ## Usage
 
+To use this package, you need macOS and a copy of Xcode.
+
 Assuming you have Python 3, run this to install the package:
 
 ```bash
