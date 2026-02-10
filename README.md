@@ -56,3 +56,16 @@ pygame-ios . game.py 2.5.6 ./template/your-template.zip
 This is useful for custom templates, or if you just want to reduce network use.
 
 It's assumed that this template has the same folder structure as a template from [pygame-ios-templates](https://github.com/seekerluke/pygame-ios-templates). The version number is also ignored if you specify a local path.
+
+## Installing Packages with `pip install`
+
+You can install pure Python packages into the Xcode template using the `--target` flag. For example with pytmx:
+
+```bash
+pip install --target ./pygame-ios-template/pygame-ios/app_packages.iphoneos pytmx
+pip install --target ./pygame-ios-template/pygame-ios/app_packages.iphonesimulator pytmx
+```
+
+I recommend using a Python version that matches the XCFramework in the template, which is 3.13 as of time of writing.
+
+Binary modules are a lot more complicated. You would need to find wheels that are already built for iOS (for example in the [BeeWare Anaconda repository](https://anaconda.org/beeware/repo), which is where the numpy build comes from) or build those packages yourself using largely undocumented methods of building for iOS.
