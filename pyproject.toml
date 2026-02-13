@@ -17,4 +17,4 @@ Homepage = "https://github.com/seekerluke/pygame-ios"
 Issues = "https://github.com/seekerluke/pygame-ios/issues"
 
 [project.scripts]
-pygame-ios = "pygame_ios.__main__:cli"
+pygame_ios = "pygame_ios.__main__:cli"

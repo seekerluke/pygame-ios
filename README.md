@@ -6,6 +6,8 @@ There's still a lot of work to be done and I'm working on documenting what's doa
 
 ---
 
+![screenshot](pygame-ios.png)
+
 # pygame-ios
 
 Run pygame-ce games on iPhones and iPads easily.
@@ -25,16 +27,18 @@ pip install pygame-ios
 This gives you a command you can run with one of the following:
 
 ```bash
-pygame-ios
-python -m pygame-ios
+pygame_ios
+python -m pygame_ios
 ```
+
+Notice the underscore. Type `pygame_ios`, not `pygame-ios`.
 
 This command needs arguments. You need to provide a location for your project folder where your files will be copied from, as well as an entry point script which will be renamed to `__main__.py` and used as the entry point in Xcode. You must also specify the pygame-ce version.
 
 Example usage:
 
 ```bash
-pygame-ios . game.py 2.5.6 # copies files from current folder, uses game.py as the entry point script, pygame-ce v2.5.6
+pygame_ios . game.py 2.5.6 # copies files from current folder, uses game.py as the entry point script, pygame-ce v2.5.6
 ```
 
 After running this command, an Xcode project will be downloaded. You can open this project in Xcode and run it on a device or simulator.
@@ -50,7 +54,7 @@ Not all pygame-ce versions are supported, see [here](https://github.com/seekerlu
 If you have a template .zip file on your machine, you can specify a path to that file instead of downloading one:
 
 ```bash
-pygame-ios . game.py 2.5.6 ./template/your-template.zip
+pygame_ios . game.py 2.5.6 ./template/your-template.zip
 ```
 
 This is useful for custom templates, or if you just want to reduce network use.
