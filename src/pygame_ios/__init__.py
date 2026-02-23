@@ -1,3 +1,3 @@
 """Run pygame-ce games on iPhones and iPads easily."""
 
-__version__ = "0.0.4"
+__version__ = "0.0.5"
