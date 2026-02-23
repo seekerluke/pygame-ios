@@ -6,9 +6,6 @@ import sys
 import pygame
 from pygame.math import Vector2
 
-# Get assets relative to the script location
-ASSETS_PATH = os.path.join(os.path.dirname(__file__), "assets")
-
 
 # Get the active UIWindow using native platform APIs, rubicon-objc allows you to do this from Python code
 # Returns None if the window hasn't been created yet
@@ -34,7 +31,7 @@ def get_safe_area_insets(ui_window) -> tuple[float, float, float, float]:
 
 
 def draw_tilemap(
-    surf: pygame.Surface, map_data: dict, image_cell_width: int, pos: Vector2
+    surf: pygame.Surface, map_image: pygame.Surface, map_data: dict, image_cell_width: int, pos: Vector2
 ):
     for layer in reversed(map_data["layers"]):
         if layer["name"] != "entities":
@@ -80,331 +77,346 @@ def get_player_spawn(map_data: dict) -> Vector2:
     return Vector2()
 
 
-# Game initialisation
-pygame.init()
-screen = pygame.display.set_mode((874, 402))
-pygame.display.set_caption("Mobile Pixel Art Example")
+class Game:
+    # Get assets relative to the script location
+    ASSETS_PATH = os.path.join(os.path.dirname(__file__), "assets")
+    
+    # Define a scale factor based on the width of the game's visible contents (usually called logical size)
+    # The scale factor scales the canvas, but some positions also need to be divided by this scale factor to be converted to canvas coordinates
+    # It is also rounded for integer scaling, important for pixel art
+    LOGICAL_WIDTH = 300
+    
+    # Size of a single frame of the player
+    PLAYER_SIZE = 16
 
-# Get the window size after set_mode, because SDL automatically changes this to the full screen size on iOS
-SCREEN_WIDTH, SCREEN_HEIGHT = pygame.display.get_window_size()
+    def __init__(self):
+        # Game initialisation
+        pygame.init()
+        self.screen = pygame.display.set_mode((874, 402))
+        pygame.display.set_caption("Mobile Pixel Art Example")
+        self.clock = pygame.Clock()
+        
+        # Get the window size after set_mode, because SDL automatically changes this to the full screen size on iOS
+        Game.SCREEN_WIDTH, Game.SCREEN_HEIGHT = pygame.display.get_window_size()
+        Game.SCALE_FACTOR = round(self.SCREEN_WIDTH / self.LOGICAL_WIDTH)
+        
+        # Create a tiny canvas to draw the tiny pixel art to, scale it up and blit to the window surface later
+        self.canvas = pygame.Surface((self.SCREEN_WIDTH / self.SCALE_FACTOR, self.SCREEN_HEIGHT / self.SCALE_FACTOR))
 
-# Define a scale factor based on the width of the game's visible contents (usually called logical size)
-# The scale factor scales the canvas, but some positions also need to be divided by this scale factor to be converted to canvas coordinates
-# It is also rounded for integer scaling, important for pixel art
-LOGICAL_WIDTH = 300
-SCALE_FACTOR = round(SCREEN_WIDTH / LOGICAL_WIDTH)
+        # Separate canvas for mobile joystick that supports transparency
+        self.controls_canvas = pygame.Surface(self.canvas.size, pygame.SRCALPHA)
 
-clock = pygame.Clock()
+        # Load the tilemap and its spritesheet, and generate collision rects
+        with open(os.path.join(self.ASSETS_PATH, "map.json")) as f:
+            self.map_data = json.load(f)
 
-# Create a tiny canvas to draw the tiny pixel art to, scale it up and blit to the window surface later
-canvas = pygame.Surface((SCREEN_WIDTH / SCALE_FACTOR, SCREEN_HEIGHT / SCALE_FACTOR))
+        self.map_collisions = create_tilemap_collision(self.map_data)
+        self.map_image = pygame.image.load(
+            os.path.join(self.ASSETS_PATH, "spritesheet.png")
+        ).convert_alpha()
+        self.map_image_width = self.map_image.width // self.map_data["tileSize"]
 
-# Separate canvas for mobile joystick that supports transparency
-controls_canvas = pygame.Surface(canvas.size, pygame.SRCALPHA)
+        # Load health pips for the UI
+        self.health_pip_image = pygame.image.load(
+            os.path.join(self.ASSETS_PATH, "health_pip.png")
+        ).convert_alpha()
+        self.health_pips = []
+        self.max_health = 4
 
-# Load the tilemap and its spritesheet, and generate collision rects
-with open(os.path.join(ASSETS_PATH, "map.json")) as f:
-    map_data = json.load(f)
+        # Load the player sprite sheet
+        self.player_image = pygame.image.load(os.path.join(self.ASSETS_PATH, "player.png")).convert()
+        self.player_image.set_colorkey((255, 0, 255))
 
-map_collisions = create_tilemap_collision(map_data)
-map_image = pygame.image.load(
-    os.path.join(ASSETS_PATH, "spritesheet.png")
-).convert_alpha()
-map_image_width = map_image.width // map_data["tileSize"]
+        # Load a shadow to display under the player
+        self.shadow_image = pygame.image.load(
+            os.path.join(self.ASSETS_PATH, "shadow.png")
+        ).convert_alpha()
 
-# Load health pips for the UI
-health_pip_image = pygame.image.load(
-    os.path.join(ASSETS_PATH, "health_pip.png")
-).convert_alpha()
-health_pips = []
-max_health = 4
+        # Animation variables, including source rectangles for blitting the player
+        self.player_anim_timer = 0.0
+        self.player_anim_index = 0
 
-# Load the player sprite sheet
-player_image = pygame.image.load(os.path.join(ASSETS_PATH, "player.png")).convert()
-player_image.set_colorkey((255, 0, 255))
-PLAYER_SIZE = 16
+        self.player_srcrects = [
+            # first row
+            (0, 0, self.PLAYER_SIZE, self.PLAYER_SIZE),
+            (16, 0, self.PLAYER_SIZE, self.PLAYER_SIZE),
+            (32, 0, self.PLAYER_SIZE, self.PLAYER_SIZE),
+            (48, 0, self.PLAYER_SIZE, self.PLAYER_SIZE),
+            # second row
+            (0, 16, self.PLAYER_SIZE, self.PLAYER_SIZE),
+            (16, 16, self.PLAYER_SIZE, self.PLAYER_SIZE),
+            (32, 16, self.PLAYER_SIZE, self.PLAYER_SIZE),
+            (48, 16, self.PLAYER_SIZE, self.PLAYER_SIZE),
+            # third row
+            (0, 32, self.PLAYER_SIZE, self.PLAYER_SIZE),
+            (16, 32, self.PLAYER_SIZE, self.PLAYER_SIZE),
+            (32, 32, self.PLAYER_SIZE, self.PLAYER_SIZE),
+            (48, 32, self.PLAYER_SIZE, self.PLAYER_SIZE),
+        ]
 
-# Load a shadow to display under the player
-shadow_image = pygame.image.load(
-    os.path.join(ASSETS_PATH, "shadow.png")
-).convert_alpha()
+        # Each animation contains a list of indices, used to index into player_srcrects
+        self.player_anim_set = {
+            "idledown": [0],
+            "idleright": [1],
+            "idleup": [2],
+            "idleleft": [3],
+            "walkdown": [4, 0, 8, 0],
+            "walkright": [5, 1, 9, 1],
+            "walkup": [6, 2, 10, 2],
+            "walkleft": [7, 3, 11, 3],
+        }
 
-# Animation variables, including source rectangles for blitting the player
-player_anim_timer = 0.0
-player_anim_index = 0
+        self.player_anim_key_prefix = "walk"
+        self.player_anim_key_suffix = "down"
+        self.player_anim_key = f"{self.player_anim_key_prefix}{self.player_anim_key_suffix}"
+        self.player_anim_prev_key = self.player_anim_key
 
-player_srcrects = [
-    # first row
-    (0, 0, PLAYER_SIZE, PLAYER_SIZE),
-    (16, 0, PLAYER_SIZE, PLAYER_SIZE),
-    (32, 0, PLAYER_SIZE, PLAYER_SIZE),
-    (48, 0, PLAYER_SIZE, PLAYER_SIZE),
-    # second row
-    (0, 16, PLAYER_SIZE, PLAYER_SIZE),
-    (16, 16, PLAYER_SIZE, PLAYER_SIZE),
-    (32, 16, PLAYER_SIZE, PLAYER_SIZE),
-    (48, 16, PLAYER_SIZE, PLAYER_SIZE),
-    # third row
-    (0, 32, PLAYER_SIZE, PLAYER_SIZE),
-    (16, 32, PLAYER_SIZE, PLAYER_SIZE),
-    (32, 32, PLAYER_SIZE, PLAYER_SIZE),
-    (48, 32, PLAYER_SIZE, PLAYER_SIZE),
-]
+        self.player_facing_dir = Vector2(0, 1)
+        self.player_pos = get_player_spawn(self.map_data)
+        self.player_hitbox = pygame.FRect(self.player_pos.x, self.player_pos.y, 10, 10)
+        self.input_dir = Vector2()
 
-# Each animation contains a list of indices, used to index into player_srcrects
-player_anim_set = {
-    "idledown": [0],
-    "idleright": [1],
-    "idleup": [2],
-    "idleleft": [3],
-    "walkdown": [4, 0, 8, 0],
-    "walkright": [5, 1, 9, 1],
-    "walkup": [6, 2, 10, 2],
-    "walkleft": [7, 3, 11, 3],
-}
+        # Load the music and footstep sound
+        pygame.mixer.music.load(os.path.join(self.ASSETS_PATH, "TownTheme.mp3"))
+        pygame.mixer.music.set_volume(0.5)
+        pygame.mixer.music.play(loops=-1)
 
-player_anim_key_prefix = "walk"
-player_anim_key_suffix = "down"
-player_anim_key = f"{player_anim_key_prefix}{player_anim_key_suffix}"
-player_anim_prev_key = player_anim_key
+        self.footstep_sounds = [
+            pygame.Sound(os.path.join(self.ASSETS_PATH, "footstep1.wav")),
+            pygame.Sound(os.path.join(self.ASSETS_PATH, "footstep2.wav")),
+            pygame.Sound(os.path.join(self.ASSETS_PATH, "footstep3.wav")),
+        ]
+        self.max_footstep_timer = 0.3
+        self.footstep_timer = self.max_footstep_timer
+        self.footstep_active = False
 
-player_facing_dir = Vector2(0, 1)
-player_pos = get_player_spawn(map_data)
-player_hitbox = pygame.FRect(player_pos.x, player_pos.y, 10, 10)
-input_dir = Vector2()
+        self.camera_pos = Vector2()
 
-# Load the music and footstep sound
-pygame.mixer.music.load(os.path.join(ASSETS_PATH, "TownTheme.mp3"))
-pygame.mixer.music.set_volume(0.5)
-pygame.mixer.music.play(loops=-1)
+        # Mobile joystick variables
+        self.original_joystick_pos = Vector2(30.0, self.controls_canvas.height - 30.0)
+        self.max_knob_distance = 15
+        self.current_joystick_finger = -1
 
-footstep_sounds = [
-    pygame.Sound(os.path.join(ASSETS_PATH, "footstep1.wav")),
-    pygame.Sound(os.path.join(ASSETS_PATH, "footstep2.wav")),
-    pygame.Sound(os.path.join(ASSETS_PATH, "footstep3.wav")),
-]
-max_footstep_timer = 0.3
-footstep_timer = max_footstep_timer
-footstep_active = False
+        # Reposition the UI elements based on safe area insets
+        if sys.platform == "ios":
+            ios_window = get_ios_window()
+            itop, ileft, ibottom, iright = get_safe_area_insets(ios_window)
 
-camera_pos = Vector2()
+            self.original_joystick_pos.x += ileft / self.SCALE_FACTOR
+            self.original_joystick_pos.y -= ibottom / self.SCALE_FACTOR
 
-# Mobile joystick variables
-original_joystick_pos = Vector2(30.0, controls_canvas.height - 30.0)
-max_knob_distance = 15
-current_joystick_finger = -1
+            for i in range(self.max_health):
+                self.health_pips.append(
+                    (
+                        self.health_pip_image,
+                        (10 + (ileft / self.SCALE_FACTOR), 10 + (12 * i) + (itop / self.SCALE_FACTOR)),
+                    )
+                )
+        else:
+            # Ignore the safe area insets on desktop
+            for i in range(self.max_health):
+                self.health_pips.append((self.health_pip_image, (10, 10 + (12 * i))))
 
-# Reposition the UI elements based on safe area insets
-if sys.platform == "ios":
-    ios_window = get_ios_window()
-    itop, ileft, ibottom, iright = get_safe_area_insets(ios_window)
+        # Set other joystick positions after safe area adjustments
+        self.current_joystick_pos = self.original_joystick_pos.copy()
+        self.current_knob_pos = self.current_joystick_pos.copy()
 
-    original_joystick_pos.x += ileft / SCALE_FACTOR
-    original_joystick_pos.y -= ibottom / SCALE_FACTOR
 
-    for i in range(max_health):
-        health_pips.append(
-            (
-                health_pip_image,
-                (10 + (ileft / SCALE_FACTOR), 10 + (12 * i) + (itop / SCALE_FACTOR)),
+    def tick(self):
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                return True
+
+            # Finger events are used to handle joystick movement
+            if event.type == pygame.FINGERDOWN:
+                # Only allow one finger at a time to control the joystick
+                if self.current_joystick_finger == -1:
+                    self.current_joystick_finger = event.finger_id
+
+                    # Finger events return x and y as normalised values between 0 and 1
+                    # Multiply by the screen size to get the correct pixel values
+                    mpos = Vector2(event.x * self.SCREEN_WIDTH, event.y * self.SCREEN_HEIGHT)
+
+                    self.current_joystick_pos = mpos / self.SCALE_FACTOR
+                    self.current_knob_pos = self.current_joystick_pos.copy()
+
+            if event.type == pygame.FINGERMOTION:
+                if self.current_joystick_finger == event.finger_id:
+                    mpos = Vector2(event.x * self.SCREEN_WIDTH, event.y * self.SCREEN_HEIGHT)
+
+                    self.current_knob_pos = mpos / self.SCALE_FACTOR
+
+                    # Constrain the knob's position to a max distance from the base
+                    diff = self.current_knob_pos - self.current_joystick_pos
+                    diff.clamp_magnitude_ip(self.max_knob_distance)
+                    self.current_knob_pos = self.current_joystick_pos + diff
+
+                    # If the joystick has moved, set input_dir to move the player
+                    self.input_dir = diff.normalize() if diff.length() > 0 else diff
+                    self.player_facing_dir = self.input_dir.copy()
+
+                    self.footstep_active = True
+
+            if event.type == pygame.FINGERUP:
+                # Release ownership of the joystick and reset its position
+                if self.current_joystick_finger == event.finger_id:
+                    self.current_joystick_finger = -1
+                    self.current_joystick_pos = self.original_joystick_pos.copy()
+                    self.current_knob_pos = self.current_joystick_pos.copy()
+                    self.input_dir = Vector2()
+
+                    self.footstep_active = False
+
+        dt = self.clock.tick(60) / 1000
+
+        # Standard WASD/arrow keys movement on desktop
+        if sys.platform != "ios":
+            pressed = pygame.key.get_pressed()
+            moved = False
+
+            up = pressed[pygame.K_w] or pressed[pygame.K_UP]
+            left = pressed[pygame.K_a] or pressed[pygame.K_LEFT]
+            down = pressed[pygame.K_s] or pressed[pygame.K_DOWN]
+            right = pressed[pygame.K_d] or pressed[pygame.K_RIGHT]
+
+            if up and down:
+                self.input_dir.y = 0
+            elif up:
+                self.input_dir.y = -1
+                moved = True
+            elif down:
+                self.input_dir.y = 1
+                moved = True
+            else:
+                self.input_dir.y = 0
+
+            if left and right:
+                self.input_dir.x = 0
+            elif left:
+                self.input_dir.x = -1
+                moved = True
+            elif right:
+                self.input_dir.x = 1
+                moved = True
+            else:
+                self.input_dir.x = 0
+
+            if moved:
+                self.input_dir.normalize_ip()
+                self.player_facing_dir = self.input_dir.copy()
+                self.footstep_active = True
+            else:
+                self.footstep_active = False
+
+        # Move and collide X
+        self.player_pos.x += self.input_dir.x
+        self.player_hitbox.x = self.player_pos.x + 3
+        for tile in self.map_collisions:
+            if tile.colliderect(self.player_hitbox):
+                if self.input_dir.x > 0:
+                    self.player_hitbox.right = tile.left
+                else:
+                    self.player_hitbox.left = tile.right
+                self.player_pos.x = self.player_hitbox.x - 3
+
+        # Move and collide Y
+        self.player_pos.y += self.input_dir.y
+        self.player_hitbox.y = self.player_pos.y + 6
+        for tile in self.map_collisions:
+            if tile.colliderect(self.player_hitbox):
+                if self.input_dir.y > 0:
+                    self.player_hitbox.bottom = tile.top
+                else:
+                    self.player_hitbox.top = tile.bottom
+                self.player_pos.y = self.player_hitbox.y - 6
+
+        # Footstep timer, activated when the player moves
+        self.footstep_timer += dt
+        if self.footstep_active and self.footstep_timer > self.max_footstep_timer:
+            random.choice(self.footstep_sounds).play()
+            self.footstep_timer = 0.0
+
+        # Animation timer, always running
+        self.player_anim_timer += dt
+        if self.player_anim_timer > self.max_footstep_timer / 2:
+            self.player_anim_index = (self.player_anim_index + 1) % len(
+                self.player_anim_set[self.player_anim_key]
             )
+            self.player_anim_timer = 0.0
+
+        # Set the correct animation key using the direction the player is facing
+        if self.player_facing_dir.angle > -135 and self.player_facing_dir.angle < -45:
+            self.player_anim_key_suffix = "up"
+        elif self.player_facing_dir.angle >= -45 and self.player_facing_dir.angle <= 45:
+            self.player_anim_key_suffix = "right"
+        elif self.player_facing_dir.angle > 45 and self.player_facing_dir.angle < 135:
+            self.player_anim_key_suffix = "down"
+        else:
+            self.player_anim_key_suffix = "left"
+
+        if self.input_dir.length() > 0.01:
+            self.player_anim_key_prefix = "walk"
+        else:
+            self.player_anim_key_prefix = "idle"
+
+        self.player_anim_key = f"{self.player_anim_key_prefix}{self.player_anim_key_suffix}"
+        # If the key has changed, reset the index and timer
+        if self.player_anim_key != self.player_anim_prev_key:
+            self.player_anim_index = 0
+            self.player_anim_timer = 0.0
+            self.player_anim_prev_key = self.player_anim_key
+
+        # Move the camera and clamp it to the tilemap bounds
+        self.camera_pos = (
+            -self.player_pos.copy()
+            + Vector2(self.canvas.width / 2, self.canvas.height / 2)
+            - Vector2(self.PLAYER_SIZE / 2, self.PLAYER_SIZE / 2)
         )
+        self.camera_pos.x = pygame.math.clamp(
+            self.camera_pos.x,
+            -(self.map_data["mapWidth"] * self.map_data["tileSize"]) + self.canvas.width,
+            0,
+        )
+        self.camera_pos.y = pygame.math.clamp(
+            self.camera_pos.y,
+            -(self.map_data["mapHeight"] * self.map_data["tileSize"]) + self.canvas.height,
+            0,
+        )
+
+        # Start drawing
+        self.canvas.fill((0, 0, 0))
+        draw_tilemap(self.canvas, self.map_image, self.map_data, self.map_image_width, self.camera_pos)
+
+        # Draw the shadow, then the player with the correct animation index
+        self.canvas.blit(self.shadow_image, self.player_pos + self.camera_pos + Vector2(3, 14))
+        srcrect_index = self.player_anim_set[self.player_anim_key][self.player_anim_index]
+        self.canvas.blit(self.player_image, self.player_pos + self.camera_pos, self.player_srcrects[srcrect_index])
+
+        self.canvas.fblits(self.health_pips)
+
+        # Draw the joystick, but only on iOS
+        if sys.platform == "ios":
+            self.controls_canvas.fill((0, 0, 0, 0))
+            pygame.draw.circle(
+                self.controls_canvas, (127, 127, 127, 100), self.current_joystick_pos, 20
+            )
+            pygame.draw.circle(self.controls_canvas, (204, 204, 204, 100), self.current_knob_pos, 10)
+            self.canvas.blit(self.controls_canvas)
+
+        # Scale up the canvas to blit it to the window surface
+        self.screen.blit(pygame.transform.scale_by(self.canvas, self.SCALE_FACTOR))
+
+        pygame.display.flip()
+        
+        return False
+
+
+game = Game()
+
+if sys.platform != "ios":
+    should_exit = False
+    while not should_exit:
+        should_exit = game.tick()
+    pygame.quit()
 else:
-    # Ignore the safe area insets on desktop
-    for i in range(max_health):
-        health_pips.append((health_pip_image, (10, 10 + (12 * i))))
-
-# Set other joystick positions after safe area adjustments
-current_joystick_pos = original_joystick_pos.copy()
-current_knob_pos = current_joystick_pos.copy()
-
-
-running = True
-while running:
-    for event in pygame.event.get():
-        if event.type == pygame.QUIT:
-            running = False
-
-        # Finger events are used to handle joystick movement
-        if event.type == pygame.FINGERDOWN:
-            # Only allow one finger at a time to control the joystick
-            if current_joystick_finger == -1:
-                current_joystick_finger = event.finger_id
-
-                # Finger events return x and y as normalised values between 0 and 1
-                # Multiply by the screen size to get the correct pixel values
-                mpos = Vector2(event.x * SCREEN_WIDTH, event.y * SCREEN_HEIGHT)
-
-                current_joystick_pos = mpos / SCALE_FACTOR
-                current_knob_pos = current_joystick_pos.copy()
-
-        if event.type == pygame.FINGERMOTION:
-            if current_joystick_finger == event.finger_id:
-                mpos = Vector2(event.x * SCREEN_WIDTH, event.y * SCREEN_HEIGHT)
-
-                current_knob_pos = mpos / SCALE_FACTOR
-
-                # Constrain the knob's position to a max distance from the base
-                diff = current_knob_pos - current_joystick_pos
-                diff.clamp_magnitude_ip(max_knob_distance)
-                current_knob_pos = current_joystick_pos + diff
-
-                # If the joystick has moved, set input_dir to move the player
-                input_dir = diff.normalize() if diff.length() > 0 else diff
-                player_facing_dir = input_dir.copy()
-
-                footstep_active = True
-
-        if event.type == pygame.FINGERUP:
-            # Release ownership of the joystick and reset its position
-            if current_joystick_finger == event.finger_id:
-                current_joystick_finger = -1
-                current_joystick_pos = original_joystick_pos.copy()
-                current_knob_pos = current_joystick_pos.copy()
-                input_dir = Vector2()
-
-                footstep_active = False
-
-    dt = clock.tick(60) / 1000
-
-    # Standard WASD/arrow keys movement on desktop
-    if sys.platform != "ios":
-        pressed = pygame.key.get_pressed()
-        moved = False
-
-        up = pressed[pygame.K_w] or pressed[pygame.K_UP]
-        left = pressed[pygame.K_a] or pressed[pygame.K_LEFT]
-        down = pressed[pygame.K_s] or pressed[pygame.K_DOWN]
-        right = pressed[pygame.K_d] or pressed[pygame.K_RIGHT]
-
-        if up and down:
-            input_dir.y = 0
-        elif up:
-            input_dir.y = -1
-            moved = True
-        elif down:
-            input_dir.y = 1
-            moved = True
-        else:
-            input_dir.y = 0
-
-        if left and right:
-            input_dir.x = 0
-        elif left:
-            input_dir.x = -1
-            moved = True
-        elif right:
-            input_dir.x = 1
-            moved = True
-        else:
-            input_dir.x = 0
-
-        if moved:
-            input_dir.normalize_ip()
-            player_facing_dir = input_dir.copy()
-            footstep_active = True
-        else:
-            footstep_active = False
-
-    # Move and collide X
-    player_pos.x += input_dir.x
-    player_hitbox.x = player_pos.x + 3
-    for tile in map_collisions:
-        if tile.colliderect(player_hitbox):
-            if input_dir.x > 0:
-                player_hitbox.right = tile.left
-            else:
-                player_hitbox.left = tile.right
-            player_pos.x = player_hitbox.x - 3
-
-    # Move and collide Y
-    player_pos.y += input_dir.y
-    player_hitbox.y = player_pos.y + 6
-    for tile in map_collisions:
-        if tile.colliderect(player_hitbox):
-            if input_dir.y > 0:
-                player_hitbox.bottom = tile.top
-            else:
-                player_hitbox.top = tile.bottom
-            player_pos.y = player_hitbox.y - 6
-
-    # Footstep timer, activated when the player moves
-    footstep_timer += dt
-    if footstep_active and footstep_timer > max_footstep_timer:
-        random.choice(footstep_sounds).play()
-        footstep_timer = 0.0
-
-    # Animation timer, always running
-    player_anim_timer += dt
-    if player_anim_timer > max_footstep_timer / 2:
-        player_anim_index = (player_anim_index + 1) % len(
-            player_anim_set[player_anim_key]
-        )
-        player_anim_timer = 0.0
-
-    # Set the correct animation key using the direction the player is facing
-    if player_facing_dir.angle > -135 and player_facing_dir.angle < -45:
-        player_anim_key_suffix = "up"
-    elif player_facing_dir.angle >= -45 and player_facing_dir.angle <= 45:
-        player_anim_key_suffix = "right"
-    elif player_facing_dir.angle > 45 and player_facing_dir.angle < 135:
-        player_anim_key_suffix = "down"
-    else:
-        player_anim_key_suffix = "left"
-
-    if input_dir.length() > 0.01:
-        player_anim_key_prefix = "walk"
-    else:
-        player_anim_key_prefix = "idle"
-
-    player_anim_key = f"{player_anim_key_prefix}{player_anim_key_suffix}"
-    # If the key has changed, reset the index and timer
-    if player_anim_key != player_anim_prev_key:
-        player_anim_index = 0
-        player_anim_timer = 0.0
-        player_anim_prev_key = player_anim_key
-
-    # Move the camera and clamp it to the tilemap bounds
-    camera_pos = (
-        -player_pos.copy()
-        + Vector2(canvas.width / 2, canvas.height / 2)
-        - Vector2(PLAYER_SIZE / 2, PLAYER_SIZE / 2)
-    )
-    camera_pos.x = pygame.math.clamp(
-        camera_pos.x,
-        -(map_data["mapWidth"] * map_data["tileSize"]) + canvas.width,
-        0,
-    )
-    camera_pos.y = pygame.math.clamp(
-        camera_pos.y,
-        -(map_data["mapHeight"] * map_data["tileSize"]) + canvas.height,
-        0,
-    )
-
-    # Start drawing
-    canvas.fill((0, 0, 0))
-    draw_tilemap(canvas, map_data, map_image_width, camera_pos)
-
-    # Draw the shadow, then the player with the correct animation index
-    canvas.blit(shadow_image, player_pos + camera_pos + Vector2(3, 14))
-    srcrect_index = player_anim_set[player_anim_key][player_anim_index]
-    canvas.blit(player_image, player_pos + camera_pos, player_srcrects[srcrect_index])
-
-    canvas.fblits(health_pips)
-
-    # Draw the joystick, but only on iOS
-    if sys.platform == "ios":
-        controls_canvas.fill((0, 0, 0, 0))
-        pygame.draw.circle(
-            controls_canvas, (127, 127, 127, 100), current_joystick_pos, 20
-        )
-        pygame.draw.circle(controls_canvas, (204, 204, 204, 100), current_knob_pos, 10)
-        canvas.blit(controls_canvas)
-
-    # Scale up the canvas to blit it to the window surface
-    screen.blit(pygame.transform.scale_by(canvas, SCALE_FACTOR))
-
-    pygame.display.flip()
-
-
-pygame.quit()
+    _ios_tick = game.tick
