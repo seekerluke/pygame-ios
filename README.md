@@ -73,3 +73,33 @@ pip install --target ./pygame-ios-template/pygame-ios/app_packages.iphonesimulat
 I recommend using a Python version that matches the XCFramework in the template, which is 3.13 as of time of writing.
 
 Binary modules are a lot more complicated. You would need to find wheels that are already built for iOS (for example in the [BeeWare Anaconda repository](https://anaconda.org/beeware/repo), which is where the numpy build comes from) or build those packages yourself using largely undocumented methods of building for iOS.
+
+## Polling Events on iOS
+
+Pygame apps typically use a pattern like this to poll events and run per-frame logic:
+
+```python
+while True:
+	for event in pygame.event.get():
+		if event.type == pygame.QUIT:
+			sys.exit(0)
+
+	pygame.display.flip()
+```
+
+This will continue to work on iOS, but it will block the main thread. This becomes a problem if you want to display any native iOS controls, like opening the Game Center dashboard. These native controls will likely hang the app.
+
+To get around this, pygame-ios allows you to poll events like this instead:
+
+```python
+def tick():
+	for event in pygame.event.get():
+		if event.type == pygame.QUIT:
+			sys.exit(0)
+
+	pygame.display.flip()
+
+_ios_tick = tick
+```
+
+The `_ios_tick` variable must be defined at the most outer scope of your entry point script, outside any methods and classes. The pygame-ios template code will find your function and use `SDL_iPhoneSetAnimationCallback` to add it to the native iOS run loop. This allows you to poll events without blocking the main thread.
